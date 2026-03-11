@@ -1,4 +1,4 @@
-const video = document.getElementById('background-video');
+const video = document.getElementById('rickroll');
   const btn = document.getElementById('btnPlayPause');
 
   btn.addEventListener('click', () => {
