@@ -1,0 +1,165 @@
+body{
+    margin: 0;
+    padding: 0;
+}
+
+.css-selector {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    background: linear-gradient(270deg, #ffffff, #000000);
+    background-size: 400% 400%;
+    -webkit-animation: AnimationName 30s ease infinite;
+    -moz-animation: AnimationName 30s ease infinite;
+    animation: AnimationName 30s ease infinite;
+}
+
+#clock {
+    color: rgb(196, 196, 196);
+    font-family: Verdana;
+    font-size: 20px;
+    width: 200px;
+    margin: auto;
+    text-align: center;
+    border: none;
+    border-radius: 20px;
+}
+
+#background-video {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  min-width: 100%;
+  min-height: 100%;
+  width: auto;
+  height: auto;
+  z-index: -1;
+  object-fit: cover; /* mantém proporção */
+}
+
+
+video {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  min-width: 100%;
+  min-height: 100%;
+  width: auto;
+  height: auto;
+  z-index: -1;
+  transform: translate(-50%, -50%);
+}
+.overlay-photo {
+    display: block;
+    position: relative;
+    top: 16px;
+    left: 16px;
+    padding: 0.5%; 
+    max-width: 15%; /* Ajusta o tamanho máximo da imagem */
+    height: auto; /* Mantém a proporção da imagem */
+    border-radius: 20px; /* Adiciona cantos arredondados */
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3); /* Adiciona sombra para destaque */
+}
+
+.background-overlay {
+    position: relative; /* Não é mais fixo */
+    margin: 40px auto;  /* Centraliza horizontalmente */
+    width: 70vw;
+    min-height: 100vh;
+    height: auto;
+    background: rgba(182, 179, 176, 0.664);
+    z-index: 0;
+    color: rgb(0, 0, 0);
+    pointer-events: none;
+    border-radius: 24px;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+.background-overlay::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 0.4em;
+    background: linear-gradient(90deg, #4a4a4a, #2c3e50, #4a4a4a);
+    border-radius: 0 0 24px 24px;
+}
+.content {
+    position: relative;
+    z-index: 1;
+    padding: 20px;
+    pointer-events: auto;
+}
+/*
+button {
+ appearance: none;
+ background-color: transparent;
+ border: 0.125em solid #131313;
+ border-radius: 0.9375em;
+ box-sizing: border-box;
+ color: #c5c3c3;
+ cursor: pointer;
+ display: block;
+ font-family: Roobert,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";
+ font-size: 16px;
+ font-weight: 600;
+ line-height: normal;
+ margin: 2rem auto;
+ min-height: 3.75em;
+ min-width: 0;
+ outline: none;
+ padding: 1em 2.3em;;
+ text-align: center;
+ text-decoration: none;
+ transition: all 300ms cubic-bezier(.23, 1, 0.32, 1);
+ user-select: none;
+ -webkit-user-select: none;
+ touch-action: manipulation;
+ will-change: transform;
+}
+
+button:disabled {
+ pointer-events: none;
+}
+
+button:hover {
+ color: #ffffff;
+ background-color: #1A1A1A;
+ box-shadow: rgba(172, 171, 171, 0.25) 0 8px 15px;
+ transform: translateY(-2px);
+}
+
+button:active {
+ box-shadow: none;
+ transform: translateY(0);
+}
+
+.center-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 90vh;  ocupa toda a altura da tela de cima a baixo 
+} 
+*/
+
+@-webkit-keyframes AnimationName {
+    0%{background-position:0% 50%}
+    50%{background-position:100% 50%}
+    100%{background-position:0% 50%}
+}
+@-moz-keyframes AnimationName {
+    0%{background-position:0% 50%}
+    50%{background-position:100% 50%}
+    100%{background-position:0% 50%}
+}
+@keyframes AnimationName {
+    0%{background-position:0% 50%}
+    50%{background-position:100% 50%}
+    100%{background-position:0% 50%}
+}
+
+
