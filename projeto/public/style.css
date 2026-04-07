@@ -5,6 +5,11 @@ body {
 	align-items: center;
 	justify-content: center;
 	font-family: Arial, sans-serif;
+  overflow-x: hidden;
+}
+
+html {
+  overflow-x: hidden;
 }
 
 .container {
@@ -17,6 +22,8 @@ h2 {
 }
 
 #chat {
+  box-sizing: border-box;
+  width: 100%;
   border: 1px solid #ddd;
   border-radius: 8px;
   padding: 12px;
@@ -24,11 +31,33 @@ h2 {
   height: 320px;
   text-align: left;
   overflow-y: auto;
+  overflow-x: hidden;
   background: #2d2d2d;
   color: #e5e7eb;
 }
 
+.chat-message {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-wrap: break-word;
+  word-break: break-all;
+}
+
+.chat-author {
+  color: #93c5fd;
+}
+
+#chat * {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 .composer {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 10px;

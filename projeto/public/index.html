@@ -39,6 +39,37 @@
     </a>
 
     <script>
+      function promptForName(initialValue = "") {
+        while (true) {
+          const value = prompt("Qual seu nome?", initialValue);
+
+          if (value === null) {
+            return null;
+          }
+
+          const clean = value.trim().slice(0, 30);
+
+          if (clean) {
+            return clean;
+          }
+        }
+      }
+
+      function getOrAskName() {
+        const savedName = localStorage.getItem("chatName");
+
+        if (savedName && savedName.trim()) {
+          return savedName.trim();
+        }
+
+        const name = promptForName();
+
+        localStorage.setItem("chatName", name);
+        return name;
+      }
+
+      let userName = getOrAskName();
+
         async function load() {
             const res = await fetch("/messages");
             const data = await res.json();
@@ -48,7 +79,17 @@
 
             data.reverse().forEach(m => {
                 const div = document.createElement("div");
-                div.textContent = m.text;
+                div.className = "chat-message";
+
+                const author = document.createElement("strong");
+                author.className = "chat-author";
+                author.textContent = `${m.name || "Anonimo"}: `;
+
+                const text = document.createElement("span");
+                text.textContent = m.text;
+
+                div.appendChild(author);
+                div.appendChild(text);
                 chat.appendChild(div);
             });
 
@@ -66,7 +107,7 @@
             await fetch("/messages", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text })
+              body: JSON.stringify({ text, name: userName })
             });
 
             input.value = "";
