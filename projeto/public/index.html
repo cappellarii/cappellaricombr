@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>Chat simples</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon"/>
   <link rel="stylesheet" href="/style.css"/>
 </head>
 <body class="css-selector">
@@ -50,6 +51,8 @@
                 div.textContent = m.text;
                 chat.appendChild(div);
             });
+
+            chat.scrollTop = chat.scrollHeight;
         }
 
         async function send() {

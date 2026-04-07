@@ -21,7 +21,7 @@ h2 {
   border-radius: 8px;
   padding: 12px;
   margin: 12px 0;
-  min-height: 140px;
+  height: 320px;
   text-align: left;
   overflow-y: auto;
   background: #2d2d2d;
