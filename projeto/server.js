@@ -19,6 +19,8 @@ const io = new Server(httpServer, {
 const uploadsDir = path.join(__dirname, "public", "uploads");
 const channelPagePath = path.join(__dirname, "private-pages", "channel.html");
 const myIpPagePath = path.join(__dirname, "private-pages", "meuip.html");
+const curriculoDir = path.join(__dirname, "curriculo");
+const curriculoPagePath = path.join(curriculoDir, "index.html");
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const DEFAULT_PROFILE = {
     avatarUrl: "",
@@ -206,6 +208,16 @@ app.get(/^\/channel\/?$/, (_req, res) => {
         }
     });
 });
+
+app.get(/^\/curriculo\/?$/, (_req, res) => {
+    res.sendFile(curriculoPagePath, (err) => {
+        if (err) {
+            res.status(500).send("Nao foi possivel abrir a pagina");
+        }
+    });
+});
+
+app.use("/curriculo-assets", express.static(curriculoDir));
 
 app.use(express.static("public"));
 app.use("/uploads", express.static(uploadsDir));
