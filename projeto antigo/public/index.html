@@ -1,0 +1,2064 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>chat do cappellari</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="letter-c.ico" type="image/x-icon"/>
+  <link rel="stylesheet" href="/style.css"/>
+</head>
+<body class="css-selector">
+  <div id="authGate" class="auth-gate">
+    <form id="authForm" class="auth-card">
+      <h2>Acesso privado</h2>
+      <p class="auth-description">Insira sua chave para continuar.</p>
+      <input id="authKeyInput" class="search-bar" type="text" placeholder="key" autocomplete="off" required />
+      <button id="authButton" type="submit">Prosseguir</button>
+      <a class="guest-chat-link" href="/open-chat.html">Entrar no chat aberto</a>
+      <p id="authError" class="auth-error" hidden></p>
+    </form>
+  </div>
+
+  <div class="container" id="chatContainer" hidden>
+    <div id="sidebarOverlay" class="sidebar-overlay" hidden></div>
+    <aside class="channels-sidebar" aria-label="Canais">
+      <div class="sidebar-top-row">
+        <div class="sidebar-top">Canais</div>
+        <div class="sidebar-actions">
+          <button id="addChannelButton" class="add-channel-button" type="button" aria-label="Criar canal">+</button>
+          <button id="closeSidebarButton" class="close-sidebar-button" type="button" aria-label="Fechar menu">x</button>
+        </div>
+      </div>
+
+      <div class="channels-group">
+        <div class="sidebar-group-title">Canais de texto</div>
+        <div id="channelsList" class="channels-list"></div>
+      </div>
+
+      <div class="channels-group">
+        <div class="sidebar-group-title">Canais de voz</div>
+        <div id="voiceChannelsList" class="channels-list voice-channels-list"></div>
+      </div>
+
+      <div class="sidebar-user">
+        <div id="audioSettings" class="sidebar-audio-settings" hidden>
+          <button id="noiseSuppressionButton" type="button">Supressor: ON</button>
+          <div id="volumeControls" hidden>
+            <label class="audio-slider-row" for="inputVolumeRange">
+              Mic <span id="inputVolumeValue">100%</span>
+            </label>
+            <input id="inputVolumeRange" type="range" min="0" max="300" step="5" value="100" />
+            <label class="audio-slider-row" for="outputVolumeRange">
+              Audio <span id="outputVolumeValue">100%</span>
+            </label>
+            <input id="outputVolumeRange" type="range" min="0" max="300" step="5" value="100" />
+          </div>
+        </div>
+        <div class="sidebar-voice-controls" id="sidebarVoiceControls">
+          <button id="muteVoiceButton" type="button" hidden>Mutar</button>
+          <button id="deafenVoiceButton" type="button" hidden>Parar de ouvir</button>
+          <button id="leaveVoiceButton" type="button" hidden>Sair da ligacao</button>
+        </div>
+        <div class="sidebar-user-name">
+          <span id="currentUser"></span>
+        </div>
+        <div class="sidebar-user-actions">
+          <a
+            class="github-sidebar-link"
+            href="https://github.com/cappellarii"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="GitHub profile"
+            title="GitHub"
+          >
+            GitHub
+          </a>
+          <button id="logoutButton" type="button">Sair</button>
+        </div>
+      </div>
+    </aside>
+
+    <section class="chat-main-panel">
+      <div class="chat-header">
+        <button id="openSidebarButton" class="mobile-menu-button" type="button" aria-label="Abrir canais">≡</button>
+        <h2 id="currentChannelTitle"># geral</h2>
+        <div class="voice-controls" id="voiceControls">
+          <span id="voiceState" class="voice-state">Sem voz</span>
+        </div>
+        <div id="onlineStatus" class="online-status">0 online</div>
+      </div>
+
+      <div id="chat"></div>
+
+      <form class="composer" id="composerForm">
+        <input
+          type="text"
+          name="text"
+          id="messageInput"
+          class="search-bar"
+          placeholder="Digite sua mensagem"
+        />
+        <input
+          type="file"
+          id="fileInput"
+          class="file-input"
+          accept="image/*,video/*,.mkv,.pdf,.zip,.rar,.7z,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.json"
+        />
+        <button id="attachButton" type="button">Anexar</button>
+        <button id="sendButton" type="submit">Enviar</button>
+      </form>
+
+      <div id="typingIndicator" class="typing-indicator" aria-live="polite"></div>
+
+      <div id="previewArea" class="preview-area"></div>
+    </section>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const AUTH_TOKEN_KEY = "chatAuthToken";
+    const NOISE_SUPPRESSION_KEY = "voiceNoiseSuppressionEnabled";
+    const INPUT_VOLUME_KEY = "voiceInputVolumePercent";
+    const OUTPUT_VOLUME_KEY = "voiceOutputVolumePercent";
+    const PAGE_SIZE = 50;
+
+    const authGate = document.getElementById("authGate");
+    const authForm = document.getElementById("authForm");
+    const authButton = document.getElementById("authButton");
+    const authError = document.getElementById("authError");
+    const authKeyInput = document.getElementById("authKeyInput");
+
+    const chatContainer = document.getElementById("chatContainer");
+    const channelsList = document.getElementById("channelsList");
+    const voiceChannelsList = document.getElementById("voiceChannelsList");
+    const sidebarOverlay = document.getElementById("sidebarOverlay");
+    const addChannelButton = document.getElementById("addChannelButton");
+    const openSidebarButton = document.getElementById("openSidebarButton");
+    const closeSidebarButton = document.getElementById("closeSidebarButton");
+    const currentChannelTitle = document.getElementById("currentChannelTitle");
+    const muteVoiceButton = document.getElementById("muteVoiceButton");
+    const deafenVoiceButton = document.getElementById("deafenVoiceButton");
+    const leaveVoiceButton = document.getElementById("leaveVoiceButton");
+    const noiseSuppressionButton = document.getElementById("noiseSuppressionButton");
+    const audioSettings = document.getElementById("audioSettings");
+    const volumeControls = document.getElementById("volumeControls");
+    const inputVolumeRange = document.getElementById("inputVolumeRange");
+    const outputVolumeRange = document.getElementById("outputVolumeRange");
+    const inputVolumeValue = document.getElementById("inputVolumeValue");
+    const outputVolumeValue = document.getElementById("outputVolumeValue");
+    const voiceState = document.getElementById("voiceState");
+    const onlineStatus = document.getElementById("onlineStatus");
+    const typingIndicator = document.getElementById("typingIndicator");
+    const currentUser = document.getElementById("currentUser");
+    const logoutButton = document.getElementById("logoutButton");
+    const chat = document.getElementById("chat");
+    const messageInput = document.getElementById("messageInput");
+    const fileInput = document.getElementById("fileInput");
+    const attachButton = document.getElementById("attachButton");
+    const sendButton = document.getElementById("sendButton");
+    const previewArea = document.getElementById("previewArea");
+
+    const loadedMessageIds = new Set();
+
+    let authToken = "";
+    let userName = "";
+    let oldestMessageId = null;
+    let newestMessageId = null;
+    let hasMoreOlderMessages = true;
+    let isLoadingOlderMessages = false;
+    let isSendingMessage = false;
+    let selectedFile = null;
+    let selectedFileObjectUrl = null;
+    let channels = [];
+    let activeChannelId = null;
+    let isTyping = false;
+    let typingStopTimeoutId = null;
+    let voiceSocket = null;
+    let voiceSocketId = "";
+    let voiceJoinedChannelId = null;
+    let localAudioStream = null;
+    let outboundAudioStream = null;
+    let isMuted = false;
+    let isDeafened = false;
+    let isNoiseSuppressionEnabled = true;
+    let inputVolumePercent = 100;
+    let outputVolumePercent = 100;
+    const peerConnections = new Map();
+    const remoteAudioPipelines = new Map();
+    const voiceParticipantsState = new Map();
+    const voiceChannelsPresence = new Map();
+    const voiceActivityMessages = [];
+    const FIXED_VOICE_CHANNEL_ID = 1;
+    const FIXED_VOICE_CHANNEL_NAME = "renato garcia";
+    let localAudioContext = null;
+    let localAudioAnalyser = null;
+    let localSpeakingIntervalId = null;
+    let localSpeakingState = false;
+    let voiceProcessingContext = null;
+    let voiceProcessingIntervalId = null;
+    let voiceProcessingGateNode = null;
+    let voiceProcessingInputGainNode = null;
+
+    function requestVoiceJoin(channelId) {
+      return new Promise((resolve, reject) => {
+        if (!voiceSocket) {
+          reject(new Error("Socket de voz indisponivel"));
+          return;
+        }
+
+        let settled = false;
+        const timeoutId = setTimeout(() => {
+          if (settled) {
+            return;
+          }
+
+          settled = true;
+          reject(new Error("Tempo de resposta do canal de voz excedido"));
+        }, 5000);
+
+        voiceSocket.emit("voice:join", { channelId }, (result = {}) => {
+          if (settled) {
+            return;
+          }
+
+          settled = true;
+          clearTimeout(timeoutId);
+
+          if (result.ok) {
+            resolve(result);
+            return;
+          }
+
+          reject(new Error(result.error || "Nao foi possivel entrar no canal de voz"));
+        });
+      });
+    }
+
+    function isMobileLayout() {
+      return window.matchMedia("(max-width: 800px)").matches;
+    }
+
+    function openSidebar() {
+      if (!isMobileLayout()) {
+        return;
+      }
+
+      chatContainer.classList.add("sidebar-open");
+      sidebarOverlay.hidden = false;
+    }
+
+    function closeSidebar() {
+      chatContainer.classList.remove("sidebar-open");
+      sidebarOverlay.hidden = true;
+    }
+
+    function resetChatState() {
+      loadedMessageIds.clear();
+      oldestMessageId = null;
+      newestMessageId = null;
+      hasMoreOlderMessages = true;
+      isLoadingOlderMessages = false;
+      isSendingMessage = false;
+      chat.innerHTML = "";
+      clearPreview();
+      messageInput.value = "";
+      typingIndicator.textContent = "";
+      isTyping = false;
+
+      if (typingStopTimeoutId) {
+        clearTimeout(typingStopTimeoutId);
+        typingStopTimeoutId = null;
+      }
+    }
+
+    function showAuthError(message) {
+      authError.hidden = false;
+      authError.textContent = message;
+    }
+
+    function hideAuthError() {
+      authError.hidden = true;
+      authError.textContent = "";
+    }
+
+    function setAuthenticatedState(username, token) {
+      authToken = token;
+      userName = username;
+      currentUser.textContent = username;
+      authGate.hidden = true;
+      chatContainer.hidden = false;
+      localStorage.setItem(AUTH_TOKEN_KEY, token);
+      resetChatState();
+      updateVoiceUi();
+      updateNoiseSuppressionUi();
+      updateVolumeUi();
+      renderVoiceParticipants();
+    }
+
+    function displayVoiceError(message) {
+      voiceState.textContent = message || "Erro no canal de voz";
+    }
+
+    function loadNoiseSuppressionPreference() {
+      const saved = localStorage.getItem(NOISE_SUPPRESSION_KEY);
+      isNoiseSuppressionEnabled = saved === null ? true : saved === "1";
+    }
+
+    function updateNoiseSuppressionUi() {
+      noiseSuppressionButton.textContent = `Supressor: ${isNoiseSuppressionEnabled ? "ON" : "OFF"}`;
+    }
+
+    function clampVolumePercent(value) {
+      const parsed = Number.parseInt(value, 10);
+
+      if (!Number.isFinite(parsed)) {
+        return 100;
+      }
+
+      return Math.min(300, Math.max(0, parsed));
+    }
+
+    function loadVolumePreferences() {
+      inputVolumePercent = clampVolumePercent(localStorage.getItem(INPUT_VOLUME_KEY));
+      outputVolumePercent = clampVolumePercent(localStorage.getItem(OUTPUT_VOLUME_KEY));
+    }
+
+    function updateVolumeUi() {
+      inputVolumeRange.value = String(inputVolumePercent);
+      outputVolumeRange.value = String(outputVolumePercent);
+      inputVolumeValue.textContent = `${inputVolumePercent}%`;
+      outputVolumeValue.textContent = `${outputVolumePercent}%`;
+    }
+
+    function getInputGainValue() {
+      return Math.max(0, inputVolumePercent / 100);
+    }
+
+    function getOutputGainValue() {
+      return Math.max(0, outputVolumePercent / 100);
+    }
+
+    function applyInputGainValue() {
+      if (voiceProcessingInputGainNode && voiceProcessingContext) {
+        voiceProcessingInputGainNode.gain.setTargetAtTime(getInputGainValue(), voiceProcessingContext.currentTime, 0.02);
+      }
+    }
+
+    function applyOutputGainValue() {
+      for (const pipeline of remoteAudioPipelines.values()) {
+        if (pipeline.gainNode && pipeline.context) {
+          const target = isDeafened ? 0 : getOutputGainValue();
+          pipeline.gainNode.gain.setTargetAtTime(target, pipeline.context.currentTime, 0.02);
+        } else if (pipeline.audioElement) {
+          pipeline.audioElement.volume = Math.min(1, outputVolumePercent / 100);
+          pipeline.audioElement.muted = isDeafened;
+        }
+      }
+    }
+
+    function createRemoteAudioPipeline(socketId, stream) {
+      let audio = document.getElementById(`voice-audio-${socketId}`);
+
+      if (!audio) {
+        audio = document.createElement("audio");
+        audio.id = `voice-audio-${socketId}`;
+        audio.autoplay = true;
+        document.body.appendChild(audio);
+      }
+
+      audio.srcObject = stream;
+
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+
+      if (!AudioCtx) {
+        audio.volume = Math.min(1, outputVolumePercent / 100);
+        audio.muted = isDeafened;
+        remoteAudioPipelines.set(socketId, { audioElement: audio });
+        return;
+      }
+
+      try {
+        const context = new AudioCtx();
+        const source = context.createMediaStreamSource(stream);
+        const gainNode = context.createGain();
+
+        gainNode.gain.value = isDeafened ? 0 : getOutputGainValue();
+        source.connect(gainNode);
+        gainNode.connect(context.destination);
+
+        // Evita duplicar audio do elemento, mantendo somente pelo pipeline.
+        audio.muted = true;
+
+        remoteAudioPipelines.set(socketId, {
+          context,
+          source,
+          gainNode,
+          audioElement: audio
+        });
+      } catch (_err) {
+        audio.volume = Math.min(1, outputVolumePercent / 100);
+        audio.muted = isDeafened;
+        remoteAudioPipelines.set(socketId, { audioElement: audio });
+      }
+    }
+
+    function destroyRemoteAudioPipeline(socketId) {
+      const pipeline = remoteAudioPipelines.get(socketId);
+
+      if (pipeline?.context) {
+        pipeline.context.close().catch(() => {});
+      }
+
+      remoteAudioPipelines.delete(socketId);
+    }
+
+    function buildAudioConstraints() {
+      return {
+        noiseSuppression: isNoiseSuppressionEnabled,
+        echoCancellation: isNoiseSuppressionEnabled,
+        autoGainControl: isNoiseSuppressionEnabled,
+        channelCount: 1
+      };
+    }
+
+    function stopVoiceProcessingPipeline() {
+      if (voiceProcessingIntervalId) {
+        clearInterval(voiceProcessingIntervalId);
+        voiceProcessingIntervalId = null;
+      }
+
+      voiceProcessingGateNode = null;
+      voiceProcessingInputGainNode = null;
+      outboundAudioStream = localAudioStream;
+
+      if (voiceProcessingContext) {
+        voiceProcessingContext.close().catch(() => {});
+        voiceProcessingContext = null;
+      }
+    }
+
+    function rebuildVoiceProcessingPipeline() {
+      if (!localAudioStream) {
+        outboundAudioStream = null;
+        stopVoiceProcessingPipeline();
+        return;
+      }
+
+      stopVoiceProcessingPipeline();
+
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+
+      if (!AudioCtx) {
+        outboundAudioStream = localAudioStream;
+        return;
+      }
+
+      voiceProcessingContext = new AudioCtx();
+
+      const source = voiceProcessingContext.createMediaStreamSource(localAudioStream);
+      const inputGain = voiceProcessingContext.createGain();
+      inputGain.gain.value = getInputGainValue();
+      const highpass = voiceProcessingContext.createBiquadFilter();
+      highpass.type = "highpass";
+      highpass.frequency.value = 120;
+
+      const compressor = voiceProcessingContext.createDynamicsCompressor();
+      compressor.threshold.value = -45;
+      compressor.knee.value = 25;
+      compressor.ratio.value = 8;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.2;
+
+      const analyser = voiceProcessingContext.createAnalyser();
+      analyser.fftSize = 512;
+
+      const gate = voiceProcessingContext.createGain();
+      gate.gain.value = 1;
+
+      const destination = voiceProcessingContext.createMediaStreamDestination();
+
+      source.connect(inputGain);
+      if (isNoiseSuppressionEnabled) {
+        inputGain.connect(highpass);
+        highpass.connect(compressor);
+        compressor.connect(analyser);
+        analyser.connect(gate);
+        gate.connect(destination);
+      } else {
+        inputGain.connect(destination);
+      }
+
+      voiceProcessingGateNode = gate;
+      voiceProcessingInputGainNode = inputGain;
+
+      if (isNoiseSuppressionEnabled) {
+        const data = new Uint8Array(analyser.fftSize);
+        voiceProcessingIntervalId = setInterval(() => {
+          if (!voiceProcessingGateNode) {
+            return;
+          }
+
+          analyser.getByteTimeDomainData(data);
+
+          let sum = 0;
+          for (let i = 0; i < data.length; i += 1) {
+            const normalized = (data[i] - 128) / 128;
+            sum += normalized * normalized;
+          }
+
+          const rms = Math.sqrt(sum / data.length);
+          const target = rms < 0.014 ? 0.05 : 1;
+          voiceProcessingGateNode.gain.setTargetAtTime(target, voiceProcessingContext.currentTime, 0.03);
+        }, 50);
+      }
+
+      outboundAudioStream = destination.stream;
+    }
+
+    async function applyNoiseSuppressionToCurrentStream() {
+      if (!localAudioStream) {
+        return;
+      }
+
+      const [track] = localAudioStream.getAudioTracks();
+
+      if (!track || typeof track.applyConstraints !== "function") {
+        return;
+      }
+
+      try {
+        await track.applyConstraints(buildAudioConstraints());
+      } catch (_err) {
+      }
+
+      rebuildVoiceProcessingPipeline();
+    }
+
+    async function toggleNoiseSuppression() {
+      isNoiseSuppressionEnabled = !isNoiseSuppressionEnabled;
+      localStorage.setItem(NOISE_SUPPRESSION_KEY, isNoiseSuppressionEnabled ? "1" : "0");
+      updateNoiseSuppressionUi();
+      await applyNoiseSuppressionToCurrentStream();
+      await refreshPeerOutboundTrack();
+    }
+
+    async function setInputVolumePercent(nextValue) {
+      inputVolumePercent = clampVolumePercent(nextValue);
+      localStorage.setItem(INPUT_VOLUME_KEY, String(inputVolumePercent));
+      updateVolumeUi();
+      applyInputGainValue();
+
+      if (!isNoiseSuppressionEnabled) {
+        rebuildVoiceProcessingPipeline();
+        await refreshPeerOutboundTrack();
+      }
+    }
+
+    function setOutputVolumePercent(nextValue) {
+      outputVolumePercent = clampVolumePercent(nextValue);
+      localStorage.setItem(OUTPUT_VOLUME_KEY, String(outputVolumePercent));
+      updateVolumeUi();
+      applyOutputGainValue();
+    }
+
+    function playVoiceJoinSound() {
+      playVoiceCue({ startFreq: 740, endFreq: 980, duration: 0.15, type: "triangle", gainPeak: 0.06 });
+    }
+
+    function playVoiceMuteSound() {
+      playVoiceCue({ startFreq: 540, endFreq: 430, duration: 0.12, type: "square", gainPeak: 0.045 });
+    }
+
+    function playVoiceUnmuteSound() {
+      playVoiceCue({ startFreq: 430, endFreq: 620, duration: 0.12, type: "sine", gainPeak: 0.05 });
+    }
+
+    function playVoiceDeafenSound() {
+      playVoiceCue({ startFreq: 360, endFreq: 300, duration: 0.14, type: "sawtooth", gainPeak: 0.04 });
+    }
+
+    function playVoiceUndeafenSound() {
+      playVoiceCue({ startFreq: 300, endFreq: 460, duration: 0.14, type: "triangle", gainPeak: 0.045 });
+    }
+
+    function playVoiceLeaveSound() {
+      playVoiceCue({ startFreq: 660, endFreq: 390, duration: 0.16, type: "triangle", gainPeak: 0.05 });
+    }
+
+    function playVoiceCue({ startFreq, endFreq, duration, type, gainPeak }) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+
+      if (!AudioCtx) {
+        return;
+      }
+
+      const context = new AudioCtx();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+
+      oscillator.type = type || "triangle";
+      oscillator.frequency.setValueAtTime(startFreq, context.currentTime);
+      oscillator.frequency.linearRampToValueAtTime(endFreq, context.currentTime + duration * 0.8);
+
+      gain.gain.setValueAtTime(0.0001, context.currentTime);
+      gain.gain.exponentialRampToValueAtTime(gainPeak || 0.05, context.currentTime + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + duration);
+
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+
+      oscillator.start();
+      oscillator.stop(context.currentTime + duration + 0.01);
+      oscillator.onended = () => {
+        context.close().catch(() => {});
+      };
+    }
+
+    function pushVoiceActivity(text) {
+      if (!text) {
+        return;
+      }
+
+      // Lista de atividade removida da UI; mantemos apenas cache interno.
+      if (!voiceActivityMessages) {
+        return;
+      }
+
+      const timestamp = new Intl.DateTimeFormat("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit"
+      }).format(new Date());
+
+      voiceActivityMessages.unshift(`${timestamp} - ${text}`);
+
+      if (voiceActivityMessages.length > 5) {
+        voiceActivityMessages.length = 5;
+      }
+
+    }
+
+    function normalizeVoicePresenceRows(payload) {
+      const normalized = new Map();
+      const rows = Array.isArray(payload?.channels) ? payload.channels : [];
+
+      rows.forEach((entry) => {
+        const channelId = Number.parseInt(entry.channelId, 10);
+
+        if (!Number.isFinite(channelId) || channelId <= 0) {
+          return;
+        }
+
+        const participants = Array.isArray(entry.participants)
+          ? entry.participants.map((participant) => ({
+            username: String(participant?.username || "Usuario"),
+            muted: Boolean(participant?.muted),
+            speaking: Boolean(participant?.speaking),
+            deafened: Boolean(participant?.deafened)
+          }))
+          : [];
+
+        normalized.set(channelId, participants);
+      });
+
+      return normalized;
+    }
+
+    function applyVoicePresence(payload, announceChanges = false) {
+      const nextPresence = normalizeVoicePresenceRows(payload);
+
+      if (announceChanges) {
+        for (const [channelId, nextUsers] of nextPresence.entries()) {
+          const previousUsers = voiceChannelsPresence.get(channelId) || [];
+          const prevNames = new Set(previousUsers.map((participant) => participant.username));
+          const current = channels.find((channel) => channel.id === channelId);
+
+          nextUsers.forEach((participant) => {
+            if (!prevNames.has(participant.username)) {
+              pushVoiceActivity(`${participant.username} entrou em call em #${current?.name || channelId}`);
+            }
+          });
+        }
+      }
+
+      voiceChannelsPresence.clear();
+
+      for (const [channelId, participants] of nextPresence.entries()) {
+        voiceChannelsPresence.set(channelId, participants);
+      }
+
+      renderVoiceChannels();
+    }
+
+    function syncCurrentVoiceChannelPresence() {
+      if (!voiceJoinedChannelId) {
+        return;
+      }
+
+      voiceChannelsPresence.set(
+        voiceJoinedChannelId,
+        Array.from(voiceParticipantsState.values()).map((participant) => ({
+          username: participant.username,
+          muted: participant.muted,
+          speaking: participant.speaking,
+          deafened: participant.deafened
+        }))
+      );
+
+      renderVoiceChannels();
+    }
+
+    function upsertVoiceParticipant(id, payload = {}) {
+      if (!id) {
+        return;
+      }
+
+      const previous = voiceParticipantsState.get(id) || {};
+      voiceParticipantsState.set(id, {
+        username: payload.username || previous.username || "Usuario",
+        muted: payload.muted !== undefined ? Boolean(payload.muted) : Boolean(previous.muted),
+        speaking: payload.speaking !== undefined ? Boolean(payload.speaking) : Boolean(previous.speaking),
+        deafened: payload.deafened !== undefined ? Boolean(payload.deafened) : Boolean(previous.deafened),
+        local: payload.local !== undefined ? Boolean(payload.local) : Boolean(previous.local)
+      });
+    }
+
+    function renderVoiceParticipants() {
+      return;
+    }
+
+    function clearSession() {
+      authToken = "";
+      userName = "";
+      activeChannelId = null;
+      channels = [];
+      channelsList.innerHTML = "";
+      voiceChannelsList.innerHTML = "";
+      voiceChannelsPresence.clear();
+      voiceActivityMessages.length = 0;
+      currentChannelTitle.textContent = "# geral";
+      onlineStatus.textContent = "0 online";
+      typingIndicator.textContent = "";
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      chatContainer.hidden = true;
+      closeSidebar();
+      leaveVoice().catch(() => {});
+      authGate.hidden = false;
+      hideAuthError();
+      authKeyInput.value = "";
+      resetChatState();
+      updateVoiceUi();
+      updateNoiseSuppressionUi();
+      updateVolumeUi();
+      renderVoiceParticipants();
+    }
+
+    function updateVoiceUi() {
+      const isConnected = Boolean(voiceJoinedChannelId);
+      const currentName = voiceJoinedChannelId === FIXED_VOICE_CHANNEL_ID
+        ? FIXED_VOICE_CHANNEL_NAME
+        : "";
+
+      muteVoiceButton.hidden = !isConnected;
+      deafenVoiceButton.hidden = !isConnected;
+      leaveVoiceButton.hidden = !isConnected;
+      audioSettings.hidden = !isConnected;
+      volumeControls.hidden = !isConnected;
+
+      muteVoiceButton.textContent = isMuted ? "Desmutar" : "Mutar";
+      deafenVoiceButton.textContent = isDeafened ? "Voltar a ouvir" : "Parar de ouvir";
+
+      voiceState.textContent = isConnected && currentName ? `Em voz: #${currentName}` : "Sem voz";
+      renderVoiceChannels();
+    }
+
+    function removeRemoteAudio(socketId) {
+      destroyRemoteAudioPipeline(socketId);
+      const audio = document.getElementById(`voice-audio-${socketId}`);
+
+      if (audio) {
+        audio.srcObject = null;
+        audio.remove();
+      }
+    }
+
+    function closePeerConnection(socketId) {
+      const peer = peerConnections.get(socketId);
+
+      if (peer) {
+        peer.onicecandidate = null;
+        peer.ontrack = null;
+        peer.close();
+      }
+
+      peerConnections.delete(socketId);
+      removeRemoteAudio(socketId);
+    }
+
+    async function ensureVoiceSocket() {
+      if (voiceSocket && voiceSocket.connected) {
+        return;
+      }
+
+      voiceSocket = io({
+        auth: {
+          token: authToken
+        }
+      });
+
+      voiceSocket.on("connect", () => {
+        voiceSocketId = String(voiceSocket.id || "");
+      });
+
+      voiceSocket.on("voice:error", ({ error }) => {
+        displayVoiceError(error || "Falha no canal de voz");
+      });
+
+      voiceSocket.on("voice:participants", async ({ participants }) => {
+        voiceParticipantsState.clear();
+        upsertVoiceParticipant("self", {
+          username: userName,
+          muted: isMuted,
+          speaking: localSpeakingState,
+          deafened: isDeafened,
+          local: true
+        });
+
+        for (const participant of participants || []) {
+          upsertVoiceParticipant(participant.socketId, {
+            username: participant.username,
+            muted: participant.muted,
+            speaking: participant.speaking,
+            deafened: participant.deafened
+          });
+          await createPeerConnection(participant.socketId, true);
+        }
+
+        syncCurrentVoiceChannelPresence();
+        renderVoiceParticipants();
+      });
+
+      voiceSocket.on("voice:user-joined", ({ socketId, username, muted, speaking, deafened }) => {
+        if (!voiceJoinedChannelId) {
+          return;
+        }
+
+        upsertVoiceParticipant(socketId, { username, muted, speaking, deafened });
+        pushVoiceActivity(`${username || "Usuario"} entrou em call`);
+        syncCurrentVoiceChannelPresence();
+        renderVoiceParticipants();
+
+        createPeerConnection(socketId, false).catch(() => {});
+      });
+
+      voiceSocket.on("voice:user-left", ({ socketId }) => {
+        closePeerConnection(socketId);
+        voiceParticipantsState.delete(socketId);
+        syncCurrentVoiceChannelPresence();
+        renderVoiceParticipants();
+      });
+
+      voiceSocket.on("voice:user-muted", ({ socketId, muted }) => {
+        const participantId = socketId === voiceSocketId ? "self" : socketId;
+        upsertVoiceParticipant(participantId, { muted });
+        syncCurrentVoiceChannelPresence();
+        renderVoiceParticipants();
+      });
+
+      voiceSocket.on("voice:user-deafened", ({ socketId, deafened }) => {
+        const participantId = socketId === voiceSocketId ? "self" : socketId;
+        upsertVoiceParticipant(participantId, { deafened });
+        syncCurrentVoiceChannelPresence();
+        renderVoiceParticipants();
+      });
+
+      voiceSocket.on("voice:user-speaking", ({ socketId, speaking }) => {
+        const participantId = socketId === voiceSocketId ? "self" : socketId;
+        upsertVoiceParticipant(participantId, { speaking });
+        renderVoiceParticipants();
+      });
+
+      voiceSocket.on("voice:signal", async ({ from, data }) => {
+        if (!from || !data) {
+          return;
+        }
+
+        const peer = await createPeerConnection(from, false);
+
+        if (data.type === "offer") {
+          await peer.setRemoteDescription(new RTCSessionDescription(data));
+          const answer = await peer.createAnswer();
+          await peer.setLocalDescription(answer);
+          voiceSocket.emit("voice:signal", { to: from, data: answer });
+          return;
+        }
+
+        if (data.type === "answer") {
+          await peer.setRemoteDescription(new RTCSessionDescription(data));
+          return;
+        }
+
+        if (data.candidate) {
+          await peer.addIceCandidate(new RTCIceCandidate(data));
+        }
+      });
+
+      voiceSocket.on("disconnect", () => {
+        for (const socketId of peerConnections.keys()) {
+          closePeerConnection(socketId);
+        }
+
+        stopLocalSpeakingMonitor();
+        voiceJoinedChannelId = null;
+        isMuted = false;
+        isDeafened = false;
+        voiceParticipantsState.clear();
+        voiceSocketId = "";
+        updateVoiceUi();
+        renderVoiceParticipants();
+      });
+    }
+
+    function stopLocalSpeakingMonitor() {
+      if (localSpeakingIntervalId) {
+        clearInterval(localSpeakingIntervalId);
+        localSpeakingIntervalId = null;
+      }
+
+      localAudioAnalyser = null;
+
+      if (localAudioContext) {
+        localAudioContext.close().catch(() => {});
+        localAudioContext = null;
+      }
+
+      localSpeakingState = false;
+    }
+
+    async function refreshPeerOutboundTrack() {
+      const nextTrack = (outboundAudioStream || localAudioStream)?.getAudioTracks()?.[0] || null;
+
+      if (!nextTrack) {
+        return;
+      }
+
+      for (const peer of peerConnections.values()) {
+        const sender = peer.getSenders().find((item) => item.track && item.track.kind === "audio");
+
+        if (sender) {
+          await sender.replaceTrack(nextTrack);
+        }
+      }
+    }
+
+    function startLocalSpeakingMonitor() {
+      if (!localAudioStream || !voiceSocket || !voiceJoinedChannelId) {
+        return;
+      }
+
+      stopLocalSpeakingMonitor();
+      localAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const source = localAudioContext.createMediaStreamSource(localAudioStream);
+      localAudioAnalyser = localAudioContext.createAnalyser();
+      localAudioAnalyser.fftSize = 512;
+      source.connect(localAudioAnalyser);
+
+      const data = new Uint8Array(localAudioAnalyser.fftSize);
+
+      localSpeakingIntervalId = setInterval(() => {
+        if (!localAudioAnalyser || !voiceSocket || !voiceJoinedChannelId) {
+          return;
+        }
+
+        localAudioAnalyser.getByteTimeDomainData(data);
+        let sum = 0;
+
+        for (let i = 0; i < data.length; i += 1) {
+          sum += Math.abs((data[i] - 128) / 128);
+        }
+
+        const speakingNow = !isMuted && (sum / data.length) > 0.08;
+
+        if (speakingNow === localSpeakingState) {
+          return;
+        }
+
+        localSpeakingState = speakingNow;
+        upsertVoiceParticipant("self", { speaking: localSpeakingState, muted: isMuted, local: true, username: userName });
+        renderVoiceParticipants();
+        voiceSocket.emit("voice:speaking", { speaking: speakingNow });
+      }, 250);
+    }
+
+    async function createPeerConnection(targetSocketId, shouldOffer) {
+      if (peerConnections.has(targetSocketId)) {
+        return peerConnections.get(targetSocketId);
+      }
+
+      const peer = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+      });
+
+      peerConnections.set(targetSocketId, peer);
+
+      const sendStream = outboundAudioStream || localAudioStream;
+
+      if (sendStream) {
+        sendStream.getAudioTracks().forEach((track) => {
+          peer.addTrack(track, sendStream);
+        });
+      }
+
+      peer.onicecandidate = (event) => {
+        if (!event.candidate || !voiceSocket) {
+          return;
+        }
+
+        voiceSocket.emit("voice:signal", {
+          to: targetSocketId,
+          data: event.candidate
+        });
+      };
+
+      peer.ontrack = (event) => {
+        const [stream] = event.streams;
+
+        if (!stream) {
+          return;
+        }
+
+        createRemoteAudioPipeline(targetSocketId, stream);
+      };
+
+      if (shouldOffer) {
+        const offer = await peer.createOffer();
+        await peer.setLocalDescription(offer);
+        voiceSocket.emit("voice:signal", { to: targetSocketId, data: offer });
+      }
+
+      return peer;
+    }
+
+    async function joinVoice(channelId = activeChannelId) {
+      const targetChannelId = channelId;
+
+      if (!authToken || !targetChannelId) {
+        return;
+      }
+
+      if (voiceJoinedChannelId === targetChannelId) {
+        return;
+      }
+
+      if (!localAudioStream) {
+        localAudioStream = await navigator.mediaDevices.getUserMedia({
+          audio: buildAudioConstraints()
+        });
+      }
+
+      rebuildVoiceProcessingPipeline();
+
+      await ensureVoiceSocket();
+
+      try {
+        await requestVoiceJoin(targetChannelId);
+        voiceJoinedChannelId = targetChannelId;
+        isMuted = false;
+        isDeafened = false;
+        voiceParticipantsState.clear();
+        upsertVoiceParticipant("self", {
+          username: userName,
+          muted: false,
+          speaking: false,
+          deafened: false,
+          local: true
+        });
+        playVoiceJoinSound();
+        startLocalSpeakingMonitor();
+        updateVoiceUi();
+        renderVoiceParticipants();
+        refreshVoiceChannels().catch(() => {});
+      } catch (err) {
+        if (!voiceJoinedChannelId && localAudioStream) {
+          localAudioStream.getTracks().forEach((track) => track.stop());
+          localAudioStream = null;
+        }
+
+        stopLocalSpeakingMonitor();
+        throw err;
+      }
+    }
+
+    async function leaveVoice() {
+      if (voiceJoinedChannelId) {
+        playVoiceLeaveSound();
+      }
+
+      if (voiceSocket && voiceJoinedChannelId) {
+        voiceSocket.emit("voice:speaking", { speaking: false });
+        voiceSocket.emit("voice:deafen", { deafened: false });
+        voiceSocket.emit("voice:leave");
+      }
+
+      for (const socketId of peerConnections.keys()) {
+        closePeerConnection(socketId);
+      }
+
+      if (localAudioStream) {
+        localAudioStream.getTracks().forEach((track) => track.stop());
+        localAudioStream = null;
+      }
+
+      stopVoiceProcessingPipeline();
+
+      stopLocalSpeakingMonitor();
+      voiceParticipantsState.clear();
+
+      if (voiceSocket && !authToken) {
+        voiceSocket.disconnect();
+        voiceSocket = null;
+      }
+
+      voiceJoinedChannelId = null;
+      isMuted = false;
+      isDeafened = false;
+      updateVoiceUi();
+      renderVoiceParticipants();
+      refreshVoiceChannels().catch(() => {});
+    }
+
+    function toggleMuteVoice() {
+      if (!localAudioStream) {
+        return;
+      }
+
+      if (isDeafened && isMuted) {
+        isDeafened = false;
+        applyDeafenToRemoteAudio();
+
+        if (voiceSocket && voiceJoinedChannelId) {
+          voiceSocket.emit("voice:deafen", { deafened: false });
+        }
+      }
+
+      isMuted = !isMuted;
+
+      if (isMuted) {
+        playVoiceMuteSound();
+      } else {
+        playVoiceUnmuteSound();
+      }
+
+      localAudioStream.getAudioTracks().forEach((track) => {
+        track.enabled = !isMuted;
+      });
+
+      if (voiceSocket && voiceJoinedChannelId) {
+        voiceSocket.emit("voice:mute", { muted: isMuted });
+        if (isMuted) {
+          localSpeakingState = false;
+          voiceSocket.emit("voice:speaking", { speaking: false });
+        }
+      }
+
+      upsertVoiceParticipant("self", {
+        username: userName,
+        muted: isMuted,
+        speaking: localSpeakingState,
+        deafened: isDeafened,
+        local: true
+      });
+
+      updateVoiceUi();
+      renderVoiceParticipants();
+      refreshVoiceChannels().catch(() => {});
+    }
+
+    function applyDeafenToRemoteAudio() {
+      applyOutputGainValue();
+    }
+
+    function toggleDeafenVoice() {
+      if (!voiceJoinedChannelId) {
+        return;
+      }
+
+      isDeafened = !isDeafened;
+
+      if (isDeafened) {
+        playVoiceDeafenSound();
+      } else {
+        playVoiceUndeafenSound();
+      }
+
+      applyDeafenToRemoteAudio();
+
+      if (voiceSocket) {
+        voiceSocket.emit("voice:deafen", { deafened: isDeafened });
+      }
+
+      if (isDeafened && !isMuted) {
+        isMuted = true;
+
+        if (localAudioStream) {
+          localAudioStream.getAudioTracks().forEach((track) => {
+            track.enabled = false;
+          });
+        }
+
+        if (voiceSocket) {
+          voiceSocket.emit("voice:mute", { muted: true });
+          voiceSocket.emit("voice:speaking", { speaking: false });
+        }
+
+        localSpeakingState = false;
+      }
+
+      upsertVoiceParticipant("self", {
+        username: userName,
+        muted: isMuted,
+        speaking: localSpeakingState,
+        deafened: isDeafened,
+        local: true
+      });
+
+      updateVoiceUi();
+      renderVoiceParticipants();
+      refreshVoiceChannels().catch(() => {});
+    }
+
+    async function fetchVoiceChannels() {
+      const res = await authFetch("/voice/channels");
+
+      if (!res.ok) {
+        throw new Error("Falha ao carregar estado dos canais de voz");
+      }
+
+      return res.json();
+    }
+
+    async function refreshVoiceChannels() {
+      if (!authToken) {
+        return;
+      }
+
+      const payload = await fetchVoiceChannels();
+      applyVoicePresence(payload, true);
+    }
+
+    async function authFetch(url, options = {}) {
+      const headers = new Headers(options.headers || {});
+
+      if (authToken) {
+        headers.set("Authorization", `Bearer ${authToken}`);
+      }
+
+      const res = await fetch(url, { ...options, headers });
+
+      if (res.status === 401) {
+        clearSession();
+        throw new Error("Sessao expirada. Entre novamente com sua chave.");
+      }
+
+      return res;
+    }
+
+    function buildMessagesUrl(params = {}) {
+      const url = new URL("/messages", window.location.origin);
+      const merged = {
+        channelId: activeChannelId || 1,
+        ...params
+      };
+
+      Object.entries(merged).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          url.searchParams.set(key, String(value));
+        }
+      });
+
+      return `${url.pathname}${url.search}`;
+    }
+
+    function sanitizeChannelName(value) {
+      return String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9_-]/g, "")
+        .slice(0, 30);
+    }
+
+    function updateCurrentChannelTitle() {
+      const current = channels.find((channel) => channel.id === activeChannelId);
+      currentChannelTitle.textContent = current ? `# ${current.name}` : "# geral";
+    }
+
+    function renderChannels() {
+      channelsList.innerHTML = "";
+
+      channels.forEach((channel) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `channel-item${channel.id === activeChannelId ? " is-active" : ""}`;
+        button.textContent = `# ${channel.name}`;
+
+        button.addEventListener("click", () => {
+          if (activeChannelId === channel.id) {
+            return;
+          }
+
+          stopTyping().catch(() => {});
+
+          activeChannelId = channel.id;
+          updateCurrentChannelTitle();
+          renderChannels();
+          resetChatState();
+          loadInitialMessages().catch(() => {});
+          refreshTyping().catch(() => {});
+          closeSidebar();
+        });
+
+        channelsList.appendChild(button);
+      });
+
+      renderVoiceChannels();
+    }
+
+    function renderVoiceChannels() {
+      voiceChannelsList.innerHTML = "";
+      const channel = {
+        id: FIXED_VOICE_CHANNEL_ID,
+        name: FIXED_VOICE_CHANNEL_NAME
+      };
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "voice-channel-entry";
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `channel-item voice-channel-item${channel.id === voiceJoinedChannelId ? " is-voice-active" : ""}`;
+      button.textContent = `# ${channel.name}`;
+
+      button.addEventListener("click", async () => {
+        try {
+          if (voiceJoinedChannelId === channel.id) {
+            await leaveVoice();
+            return;
+          }
+
+          await joinVoice(channel.id);
+          closeSidebar();
+        } catch (err) {
+          displayVoiceError(err?.message || "Nao foi possivel entrar no canal de voz");
+        }
+      });
+
+      const users = voiceChannelsPresence.get(channel.id) || [];
+      const usersList = document.createElement("div");
+      usersList.className = "voice-channel-users";
+
+      if (users.length === 0) {
+        usersList.innerHTML = "<div class=\"voice-channel-user is-empty\">vazio</div>";
+      } else {
+        users.forEach((participant) => {
+          const user = document.createElement("div");
+          user.className = "voice-channel-user";
+
+          if (participant.muted) {
+            user.classList.add("is-muted");
+          }
+
+          const tags = [];
+          if (participant.muted) {
+            tags.push("mutado");
+          }
+
+          if (participant.deafened) {
+            tags.push("sem audio");
+          }
+
+          user.textContent = tags.length > 0
+            ? `${participant.username} (${tags.join(", ")})`
+            : participant.username;
+          usersList.appendChild(user);
+        });
+      }
+
+      wrapper.appendChild(button);
+      wrapper.appendChild(usersList);
+      voiceChannelsList.appendChild(wrapper);
+    }
+
+    async function fetchChannels() {
+      const res = await authFetch("/channels");
+
+      if (!res.ok) {
+        throw new Error("Falha ao carregar canais");
+      }
+
+      return res.json();
+    }
+
+    async function loadChannels() {
+      const data = await fetchChannels();
+      channels = Array.isArray(data) ? data : [];
+
+      if (channels.length === 0) {
+        throw new Error("Nenhum canal encontrado");
+      }
+
+      const stillExists = channels.some((channel) => channel.id === activeChannelId);
+
+      if (!stillExists) {
+        activeChannelId = channels[0].id;
+      }
+
+      updateCurrentChannelTitle();
+      renderChannels();
+      await refreshVoiceChannels();
+    }
+
+    async function createChannel(name) {
+      const channelName = sanitizeChannelName(name);
+
+      if (!channelName || channelName.length < 2) {
+        throw new Error("Nome do canal invalido");
+      }
+
+      const res = await authFetch("/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: channelName })
+      });
+
+      let payload = {};
+      try {
+        payload = await res.json();
+      } catch (_err) {
+        payload = {};
+      }
+
+      if (!res.ok) {
+        throw new Error(payload.error || "Falha ao criar canal");
+      }
+
+      await loadChannels();
+      activeChannelId = payload.id;
+      updateCurrentChannelTitle();
+      renderChannels();
+      resetChatState();
+      await loadInitialMessages();
+    }
+
+    async function fetchPresence() {
+      const res = await authFetch("/presence");
+
+      if (!res.ok) {
+        throw new Error("Falha ao carregar presenca");
+      }
+
+      return res.json();
+    }
+
+    async function fetchTyping() {
+      const url = new URL("/typing", window.location.origin);
+      url.searchParams.set("channelId", String(activeChannelId || 1));
+
+      const res = await authFetch(`${url.pathname}${url.search}`);
+
+      if (!res.ok) {
+        throw new Error("Falha ao carregar digitando");
+      }
+
+      return res.json();
+    }
+
+    function renderPresence(payload) {
+      const users = Array.isArray(payload?.users) ? payload.users : [];
+      onlineStatus.textContent = `${users.length} online`;
+      onlineStatus.title = users.length > 0 ? users.join(", ") : "Nenhum usuario online";
+    }
+
+    function renderTyping(payload) {
+      const users = Array.isArray(payload?.users)
+        ? payload.users.filter((name) => name !== userName)
+        : [];
+
+      if (users.length === 0) {
+        typingIndicator.textContent = "";
+        return;
+      }
+
+      if (users.length === 1) {
+        typingIndicator.textContent = `${users[0]} esta digitando...`;
+        return;
+      }
+
+      if (users.length === 2) {
+        typingIndicator.textContent = `${users[0]} e ${users[1]} estao digitando...`;
+        return;
+      }
+
+      typingIndicator.textContent = `${users[0]}, ${users[1]} e mais ${users.length - 2} estao digitando...`;
+    }
+
+    async function refreshPresence() {
+      if (!authToken) {
+        return;
+      }
+
+      const payload = await fetchPresence();
+      renderPresence(payload);
+    }
+
+    async function refreshTyping() {
+      if (!authToken || !activeChannelId) {
+        return;
+      }
+
+      const payload = await fetchTyping();
+      renderTyping(payload);
+    }
+
+    async function startTyping() {
+      if (!authToken || !activeChannelId || isTyping) {
+        return;
+      }
+
+      isTyping = true;
+
+      try {
+        await authFetch("/typing/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ channelId: activeChannelId })
+        });
+      } catch (_err) {
+      }
+    }
+
+    async function stopTyping() {
+      if (!authToken || !activeChannelId || !isTyping) {
+        return;
+      }
+
+      isTyping = false;
+
+      try {
+        await authFetch("/typing/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ channelId: activeChannelId })
+        });
+      } catch (_err) {
+      }
+    }
+
+    function updateBoundaries(message) {
+      if (oldestMessageId === null || message.id < oldestMessageId) {
+        oldestMessageId = message.id;
+      }
+
+      if (newestMessageId === null || message.id > newestMessageId) {
+        newestMessageId = message.id;
+      }
+    }
+
+    function parseServerDate(value) {
+      if (!value) {
+        return null;
+      }
+
+      const raw = String(value).trim();
+      const normalized = raw.includes("T") ? raw : `${raw.replace(" ", "T")}Z`;
+      const parsed = new Date(normalized);
+
+      if (!Number.isFinite(parsed.getTime())) {
+        return null;
+      }
+
+      return parsed;
+    }
+
+    function formatMessageTimestamp(value) {
+      const date = parseServerDate(value);
+
+      if (!date) {
+        return "";
+      }
+
+      return new Intl.DateTimeFormat("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+      }).format(date);
+    }
+
+    function renderMessage(message, position = "bottom") {
+      if (loadedMessageIds.has(message.id)) {
+        return;
+      }
+
+      const div = document.createElement("div");
+      div.className = "chat-message";
+
+      const meta = document.createElement("div");
+      meta.className = "chat-meta";
+
+      const author = document.createElement("strong");
+      author.className = "chat-author";
+      author.textContent = `${message.name || "Anonimo"}`;
+      meta.appendChild(author);
+
+      const time = document.createElement("span");
+      time.className = "chat-time";
+      time.textContent = formatMessageTimestamp(message.created_at);
+      meta.appendChild(time);
+
+      div.appendChild(meta);
+
+      if (message.text) {
+        const text = document.createElement("span");
+        text.textContent = message.text;
+        div.appendChild(text);
+      }
+
+      const attachmentElement = buildAttachmentElement(message);
+
+      if (attachmentElement) {
+        div.appendChild(attachmentElement);
+      }
+
+      if (position === "top") {
+        chat.prepend(div);
+      } else {
+        chat.appendChild(div);
+      }
+
+      loadedMessageIds.add(message.id);
+      updateBoundaries(message);
+    }
+
+    function buildAttachmentElement(message) {
+      if (!message.file_url) {
+        return null;
+      }
+
+      const mime = String(message.file_mime || "").toLowerCase();
+      const url = message.file_url;
+      const safeName = message.file_name || "arquivo";
+
+      if (mime.startsWith("image/")) {
+        const img = document.createElement("img");
+        img.className = "chat-attachment chat-image";
+        img.src = url;
+        img.alt = safeName;
+        img.loading = "lazy";
+        return img;
+      }
+
+      if (mime.startsWith("video/")) {
+        const video = document.createElement("video");
+        video.className = "chat-attachment chat-video";
+        video.src = url;
+        video.controls = true;
+        video.preload = "metadata";
+        return video;
+      }
+
+      const fileLink = document.createElement("a");
+      fileLink.className = "chat-attachment chat-file";
+      fileLink.href = url;
+      fileLink.target = "_blank";
+      fileLink.rel = "noopener noreferrer";
+      fileLink.textContent = `Arquivo: ${safeName}`;
+      return fileLink;
+    }
+
+    function formatBytes(bytes) {
+      const value = Number(bytes || 0);
+
+      if (!Number.isFinite(value) || value <= 0) {
+        return "0 B";
+      }
+
+      const units = ["B", "KB", "MB", "GB"];
+      const exp = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+      const size = value / (1024 ** exp);
+      return `${size.toFixed(size >= 10 || exp === 0 ? 0 : 1)} ${units[exp]}`;
+    }
+
+    function clearPreview() {
+      previewArea.innerHTML = "";
+      selectedFile = null;
+      fileInput.value = "";
+
+      if (selectedFileObjectUrl) {
+        URL.revokeObjectURL(selectedFileObjectUrl);
+        selectedFileObjectUrl = null;
+      }
+    }
+
+    function showFilePreview(file) {
+      clearPreview();
+      selectedFile = file;
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "preview-card";
+
+      const title = document.createElement("div");
+      title.className = "preview-title";
+      title.textContent = `${file.name} (${formatBytes(file.size)})`;
+      wrapper.appendChild(title);
+
+      if (file.type.startsWith("image/")) {
+        selectedFileObjectUrl = URL.createObjectURL(file);
+        const image = document.createElement("img");
+        image.src = selectedFileObjectUrl;
+        image.alt = file.name;
+        image.className = "preview-media";
+        wrapper.appendChild(image);
+      } else if (file.type.startsWith("video/")) {
+        selectedFileObjectUrl = URL.createObjectURL(file);
+        const video = document.createElement("video");
+        video.src = selectedFileObjectUrl;
+        video.controls = true;
+        video.preload = "metadata";
+        video.className = "preview-media";
+        wrapper.appendChild(video);
+      }
+
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "remove-preview-button";
+      removeButton.textContent = "Remover anexo";
+      removeButton.addEventListener("click", clearPreview);
+      wrapper.appendChild(removeButton);
+
+      previewArea.appendChild(wrapper);
+    }
+
+    async function fetchMessages(params = {}) {
+      const res = await authFetch(buildMessagesUrl(params));
+
+      if (!res.ok) {
+        throw new Error("Falha ao buscar mensagens");
+      }
+
+      return res.json();
+    }
+
+    async function loadInitialMessages() {
+      const data = await fetchMessages({ limit: PAGE_SIZE });
+      data.forEach((message) => renderMessage(message, "bottom"));
+      hasMoreOlderMessages = data.length === PAGE_SIZE;
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    async function loadOlderMessages() {
+      if (!hasMoreOlderMessages || oldestMessageId === null || isLoadingOlderMessages) {
+        return;
+      }
+
+      isLoadingOlderMessages = true;
+      const previousHeight = chat.scrollHeight;
+      const previousTop = chat.scrollTop;
+
+      try {
+        const data = await fetchMessages({ beforeId: oldestMessageId, limit: PAGE_SIZE });
+
+        for (let i = data.length - 1; i >= 0; i -= 1) {
+          renderMessage(data[i], "top");
+        }
+
+        hasMoreOlderMessages = data.length === PAGE_SIZE;
+        chat.scrollTop = chat.scrollHeight - previousHeight + previousTop;
+      } finally {
+        isLoadingOlderMessages = false;
+      }
+    }
+
+    async function loadNewMessages() {
+      if (newestMessageId === null || !authToken) {
+        return;
+      }
+
+      const shouldStickToBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 20;
+      const data = await fetchMessages({ afterId: newestMessageId, limit: PAGE_SIZE });
+      data.forEach((message) => renderMessage(message, "bottom"));
+
+      if (shouldStickToBottom && data.length > 0) {
+        chat.scrollTop = chat.scrollHeight;
+      }
+    }
+
+    async function send() {
+      if (isSendingMessage || !authToken) {
+        return;
+      }
+
+      const input = document.getElementById("messageInput");
+      const text = input.value.trim();
+
+      if (!text && !selectedFile) {
+        return;
+      }
+
+      isSendingMessage = true;
+      sendButton.disabled = true;
+
+      try {
+        const formData = new FormData();
+        formData.append("channelId", String(activeChannelId || 1));
+
+        if (text) {
+          formData.append("text", text);
+        }
+
+        if (selectedFile) {
+          formData.append("file", selectedFile);
+        }
+
+        const res = await authFetch("/messages", {
+          method: "POST",
+          body: formData
+        });
+
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+
+        input.value = "";
+        clearPreview();
+
+        if (newestMessageId === null) {
+          await loadInitialMessages();
+        } else {
+          await loadNewMessages();
+        }
+      } finally {
+        isSendingMessage = false;
+        sendButton.disabled = false;
+      }
+    }
+
+    async function loginWithKey(key) {
+      const res = await fetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key })
+      });
+
+      let payload = {};
+      try {
+        payload = await res.json();
+      } catch (_err) {
+        payload = {};
+      }
+
+      if (!res.ok) {
+        throw new Error(payload.error || "Nao foi possivel validar a chave");
+      }
+
+      setAuthenticatedState(payload.username, payload.token);
+      await loadChannels();
+      await loadInitialMessages();
+      await refreshPresence();
+      await refreshTyping();
+    }
+
+    async function tryRestoreSession() {
+      const savedToken = localStorage.getItem(AUTH_TOKEN_KEY);
+
+      if (!savedToken) {
+        clearSession();
+        return;
+      }
+
+      authToken = savedToken;
+      const res = await authFetch("/auth/me");
+
+      if (!res.ok) {
+        clearSession();
+        return;
+      }
+
+      const me = await res.json();
+      setAuthenticatedState(me.username, savedToken);
+      await loadChannels();
+      await loadInitialMessages();
+      await refreshPresence();
+      await refreshTyping();
+    }
+
+    authForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      hideAuthError();
+      authButton.disabled = true;
+
+      try {
+        const key = authKeyInput.value.trim();
+        await loginWithKey(key);
+      } catch (err) {
+        showAuthError(err.message || "Falha ao entrar");
+      } finally {
+        authButton.disabled = false;
+      }
+    });
+
+    logoutButton.addEventListener("click", async () => {
+      try {
+        if (authToken) {
+          await authFetch("/auth/logout", { method: "POST" });
+        }
+      } catch (_err) {
+      } finally {
+        clearSession();
+      }
+    });
+
+    openSidebarButton.addEventListener("click", () => {
+      openSidebar();
+    });
+
+    noiseSuppressionButton.addEventListener("click", async () => {
+      await toggleNoiseSuppression();
+    });
+
+    inputVolumeRange.addEventListener("input", async (event) => {
+      await setInputVolumePercent(event.target.value);
+    });
+
+    outputVolumeRange.addEventListener("input", (event) => {
+      setOutputVolumePercent(event.target.value);
+    });
+
+    muteVoiceButton.addEventListener("click", () => {
+      toggleMuteVoice();
+    });
+
+    deafenVoiceButton.addEventListener("click", () => {
+      toggleDeafenVoice();
+    });
+
+    leaveVoiceButton.addEventListener("click", async () => {
+      try {
+        await leaveVoice();
+      } catch (_err) {
+      }
+    });
+
+    closeSidebarButton.addEventListener("click", () => {
+      closeSidebar();
+    });
+
+    sidebarOverlay.addEventListener("click", () => {
+      closeSidebar();
+    });
+
+    window.addEventListener("resize", () => {
+      if (!isMobileLayout()) {
+        closeSidebar();
+      }
+    });
+
+    setInterval(() => {
+      loadNewMessages().catch(() => {});
+    }, 2000);
+
+    setInterval(() => {
+      refreshPresence().catch(() => {});
+    }, 5000);
+
+    setInterval(() => {
+      refreshTyping().catch(() => {});
+    }, 1500);
+
+    setInterval(() => {
+      refreshVoiceChannels().catch(() => {});
+    }, 2500);
+
+    chat.addEventListener("scroll", () => {
+      if (chat.scrollTop <= 24) {
+        loadOlderMessages().catch(() => {});
+      }
+    });
+
+    attachButton.addEventListener("click", () => {
+      fileInput.click();
+    });
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files && fileInput.files[0];
+
+      if (!file) {
+        return;
+      }
+
+      showFilePreview(file);
+    });
+
+    messageInput.addEventListener("input", () => {
+      const value = messageInput.value.trim();
+
+      if (!value) {
+        stopTyping().catch(() => {});
+        return;
+      }
+
+      startTyping().catch(() => {});
+
+      if (typingStopTimeoutId) {
+        clearTimeout(typingStopTimeoutId);
+      }
+
+      typingStopTimeoutId = setTimeout(() => {
+        stopTyping().catch(() => {});
+      }, 2200);
+    });
+
+    messageInput.addEventListener("blur", () => {
+      stopTyping().catch(() => {});
+    });
+
+    addChannelButton.addEventListener("click", async () => {
+      const name = prompt("Nome do novo canal:", "novo-canal");
+
+      if (name === null) {
+        return;
+      }
+
+      addChannelButton.disabled = true;
+
+      try {
+        await createChannel(name);
+      } catch (err) {
+        alert(err.message || "Falha ao criar canal");
+      } finally {
+        addChannelButton.disabled = false;
+      }
+    });
+
+    document.getElementById("composerForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      try {
+        await send();
+        stopTyping().catch(() => {});
+      } catch (err) {
+        alert(err.message || "Falha ao enviar mensagem");
+      }
+    });
+
+    loadNoiseSuppressionPreference();
+    loadVolumePreferences();
+
+    tryRestoreSession().catch(() => {
+      clearSession();
+    });
+
+    updateVoiceUi();
+    updateNoiseSuppressionUi();
+    updateVolumeUi();
+  </script>
+</body>
+</html>

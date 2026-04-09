@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>chat aberto</title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .open-wrapper {
+      width: min(920px, 96vw);
+      height: min(820px, calc(100dvh - 32px));
+      display: flex;
+      flex-direction: column;
+      border-radius: 14px;
+      border: 1px solid rgba(113, 194, 184, 0.2);
+      background: rgba(16, 39, 42, 0.88);
+      backdrop-filter: blur(8px);
+      padding: 14px;
+      box-sizing: border-box;
+      gap: 10px;
+    }
+
+    .open-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: #e5e7eb;
+    }
+
+    .open-badge {
+      font-size: 0.78rem;
+      color: #bbf7d0;
+      background: rgba(34, 197, 94, 0.14);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      border-radius: 999px;
+      padding: 4px 10px;
+    }
+
+    #openChat {
+      flex: 1;
+      min-height: 0;
+      border: 1px solid rgba(113, 194, 184, 0.22);
+      border-radius: 8px;
+      background: rgba(18, 43, 46, 0.72);
+      color: #e5e7eb;
+      padding: 12px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      box-sizing: border-box;
+    }
+
+    .open-message {
+      margin-bottom: 10px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: #e5e7eb;
+    }
+
+    .open-author {
+      color: #93c5fd;
+      font-weight: 700;
+      margin-right: 8px;
+    }
+
+    .open-time {
+      color: #9ca3af;
+      font-size: 0.74rem;
+      margin-left: 8px;
+    }
+
+    .open-form {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+    }
+
+    .open-form .search-bar {
+      height: 38px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .open-message-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      width: 100%;
+    }
+
+    #openSendButton {
+      height: 38px;
+      border: 1px solid rgba(110, 231, 213, 0.32);
+      border-radius: 6px;
+      background: rgba(31, 99, 88, 0.92);
+      color: #ecfdf5;
+      padding: 0 14px;
+      cursor: pointer;
+      min-width: 96px;
+    }
+
+    #openSendButton:hover {
+      filter: brightness(1.08);
+    }
+
+    @media (max-width: 800px) {
+      body {
+        padding: 0;
+        align-items: stretch;
+      }
+
+      .open-wrapper {
+        width: 100vw;
+        height: 100dvh;
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+        border-top: none;
+      }
+
+      .open-form {
+        gap: 6px;
+      }
+
+      .open-message-row {
+        grid-template-columns: 1fr;
+      }
+
+      #openSendButton {
+        height: 44px;
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body class="css-selector">
+  <main class="open-wrapper">
+    <header class="open-header">
+      <h2># chat-aberto</h2>
+      <span class="open-badge">Sem login • Somente texto</span>
+    </header>
+
+    <section id="openChat"></section>
+
+    <form id="openForm" class="open-form">
+      <input id="openNameInput" class="search-bar" type="text" placeholder="Seu nome" maxlength="30" required />
+      <div class="open-message-row">
+        <input id="openMessageInput" class="search-bar" type="text" placeholder="Digite sua mensagem" maxlength="1000" required />
+        <button id="openSendButton" type="submit">Enviar</button>
+      </div>
+    </form>
+  </main>
+
+  <script>
+    const OPEN_NAME_KEY = "openChatName";
+    const PAGE_SIZE = 80;
+
+    const openChat = document.getElementById("openChat");
+    const openForm = document.getElementById("openForm");
+    const openNameInput = document.getElementById("openNameInput");
+    const openMessageInput = document.getElementById("openMessageInput");
+    const openSendButton = document.getElementById("openSendButton");
+
+    let newestMessageId = null;
+    const loadedMessageIds = new Set();
+
+    function parseServerDate(value) {
+      if (!value) {
+        return null;
+      }
+
+      const raw = String(value).trim();
+      const normalized = raw.includes("T") ? raw : `${raw.replace(" ", "T")}Z`;
+      const parsed = new Date(normalized);
+      return Number.isFinite(parsed.getTime()) ? parsed : null;
+    }
+
+    function formatTime(value) {
+      const date = parseServerDate(value);
+
+      if (!date) {
+        return "";
+      }
+
+      return new Intl.DateTimeFormat("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+      }).format(date);
+    }
+
+    function renderOpenMessage(message) {
+      if (!message || loadedMessageIds.has(message.id)) {
+        return;
+      }
+
+      const row = document.createElement("div");
+      row.className = "open-message";
+
+      const author = document.createElement("span");
+      author.className = "open-author";
+      author.textContent = message.name || "Anonimo";
+      row.appendChild(author);
+
+      const text = document.createElement("span");
+      text.textContent = message.text || "";
+      row.appendChild(text);
+
+      const time = document.createElement("span");
+      time.className = "open-time";
+      time.textContent = formatTime(message.created_at);
+      row.appendChild(time);
+
+      openChat.appendChild(row);
+      loadedMessageIds.add(message.id);
+
+      if (newestMessageId === null || message.id > newestMessageId) {
+        newestMessageId = message.id;
+      }
+    }
+
+    async function fetchOpenMessages(params = {}) {
+      const url = new URL("/public-chat/messages", window.location.origin);
+
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          url.searchParams.set(key, String(value));
+        }
+      });
+
+      const res = await fetch(`${url.pathname}${url.search}`);
+
+      if (!res.ok) {
+        throw new Error("Falha ao carregar mensagens");
+      }
+
+      return res.json();
+    }
+
+    async function loadInitialMessages() {
+      const rows = await fetchOpenMessages({ limit: PAGE_SIZE });
+      rows.forEach((row) => renderOpenMessage(row));
+      openChat.scrollTop = openChat.scrollHeight;
+    }
+
+    async function loadNewMessages() {
+      if (newestMessageId === null) {
+        return;
+      }
+
+      const stickToBottom = openChat.scrollHeight - openChat.scrollTop - openChat.clientHeight < 20;
+      const rows = await fetchOpenMessages({ afterId: newestMessageId, limit: PAGE_SIZE });
+      rows.forEach((row) => renderOpenMessage(row));
+
+      if (stickToBottom && rows.length > 0) {
+        openChat.scrollTop = openChat.scrollHeight;
+      }
+    }
+
+    async function sendOpenMessage() {
+      const name = String(openNameInput.value || "").trim();
+      const text = String(openMessageInput.value || "").trim();
+
+      if (!name || !text) {
+        return;
+      }
+
+      openSendButton.disabled = true;
+
+      try {
+        const res = await fetch("/public-chat/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, text })
+        });
+
+        let payload = {};
+        try {
+          payload = await res.json();
+        } catch (_err) {
+          payload = {};
+        }
+
+        if (!res.ok) {
+          throw new Error(payload.error || "Falha ao enviar mensagem");
+        }
+
+        localStorage.setItem(OPEN_NAME_KEY, name);
+        openMessageInput.value = "";
+        await loadNewMessages();
+      } finally {
+        openSendButton.disabled = false;
+      }
+    }
+
+    openForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      try {
+        await sendOpenMessage();
+      } catch (err) {
+        alert(err.message || "Erro ao enviar mensagem");
+      }
+    });
+
+    const savedName = localStorage.getItem(OPEN_NAME_KEY);
+
+    if (savedName) {
+      openNameInput.value = savedName;
+    }
+
+    loadInitialMessages().catch(() => {});
+
+    setInterval(() => {
+      loadNewMessages().catch(() => {});
+    }, 2000);
+  </script>
+</body>
+</html>
